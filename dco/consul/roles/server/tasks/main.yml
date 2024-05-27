@@ -1,0 +1,14 @@
+---
+
+  - name: Add to letsencrypt group
+    user:
+      name: "{{ consul_user }}"
+      groups: 
+        - "{{ lets_encrypt_group }}"
+  
+  - name: Add Consul Server Config
+    template:
+      src: server-config.hcl.j2
+      dest: "{{consul_config_dir}}/server-config.hcl"
+    notify: Restart Consul
+  

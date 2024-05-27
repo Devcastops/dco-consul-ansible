@@ -1,0 +1,8 @@
+---
+lets_encrypt_group: letsencrypt
+consul_user: consul
+consul_config_dir: "/etc/consul.d"
+consul_data_dir: "/opt/consul/data"
+consul_tls_dir: "{{consul_config_dir}}/tls"
+consul_ext_tls_key_dest: "{{ lets_encrypt_privkey }}"
+consul_ext_tls_crt_dest: "{{ lets_encrypt_fullchain }}"

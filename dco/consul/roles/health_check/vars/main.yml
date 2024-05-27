@@ -1,0 +1,3 @@
+---
+# vars file for consul_health_check
+consul_acl_token: ""

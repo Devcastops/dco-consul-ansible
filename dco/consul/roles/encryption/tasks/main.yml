@@ -1,0 +1,65 @@
+---
+
+  - name: Register Key if exist
+    command:
+      cmd: cat {{consul_config_dir}}/acl_key
+    register: encryption_key
+    run_once: true
+    failed_when: 
+      - encryption_key.rc != 0
+      - '"No such file or directory" not in encryption_key.stderr'
+  
+  - name: Registering Key
+    set_fact: 
+      key_val : "{{encryption_key.stdout}}"
+      read_from_file: true
+  
+  - name: Generate Key
+    command:
+      cmd: consul keygen
+    register: encryption_key
+    run_once: true
+    when: encryption_key.stdout == ''
+  
+  - name: Registering Key
+    set_fact: 
+      key_val : "{{encryption_key.stdout}}"
+      read_from_file: false
+    when: encryption_key.changed
+  
+  - name: Write encryption_key into file
+    copy:
+      content: "{{key_val}}"
+      dest: "{{consul_config_dir}}/acl_key"
+  
+  - name: Registered old keys
+    uri:
+      url: https://127.0.0.1:8501/v1/operator/keyring?local-only=true
+      headers: 
+        X-Consul-Token: "{{ consul_acl_token }}"
+      return_content: true
+      validate_certs: false
+    register: old_keys
+    run_once: true
+  
+  - name: Install Key
+    environment: 
+      CONSUL_HTTP_TOKEN: "{{ consul_acl_token }}"
+    command:
+      cmd: consul keyring -install {{key_val}} 
+    retries: 2
+  
+  - name: Use Key
+    environment: 
+      CONSUL_HTTP_TOKEN : "{{ consul_acl_token }}"
+    command:
+      cmd: consul keyring -use {{key_val}} 
+    retries: 2
+  
+  - name: Removing old keys
+    environment: 
+      CONSUL_HTTP_TOKEN: "{{ consul_acl_token }}"
+    command:
+      cmd: consul keyring -remove {{item}}
+    with_items: "{{old_keys.json[0].Keys.keys()}}"
+    when: read_from_file == false

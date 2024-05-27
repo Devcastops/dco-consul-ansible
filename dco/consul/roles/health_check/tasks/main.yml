@@ -1,0 +1,85 @@
+---
+
+  - name: Service Running
+    ansible.builtin.service_facts:
+  
+  - name: Print service facts
+    ansible.builtin.debug:
+      var: ansible_facts.services["consul.service"]
+  
+  - name: Service exists?
+    ansible.builtin.debug:
+      msg: "Consul service does not exist!"
+    failed_when: ("consul.service" not in ansible_facts.services)
+    when: ("consul.service" not in ansible_facts.services)
+  
+  - name: Consul service is running?
+    ansible.builtin.debug:
+      msg: "Consul service isn't running!"
+    failed_when: (ansible_facts.services["consul.service"].state != "running")
+    when: (ansible_facts.services["consul.service"].state != "running")
+  
+  - name: Get consul members
+    environment: 
+      CONSUL_HTTP_TOKEN: "{{ consul_acl_token }}"
+    command:
+      cmd: consul members
+    register: consul_members
+    run_once: true
+  
+  - name: Debug members
+    ansible.builtin.debug:
+      var: consul_members.stdout_lines
+    run_once: true
+  
+  - name: IP/Host in members
+    ansible.builtin.debug:
+      msg: "IP not in memebers"
+    failed_when: (inventory_hostname not in consul_members.stdout)
+    when: (inventory_hostname not in consul_members.stdout)
+    
+  - name: Get Consul Server health Data
+    ansible.builtin.uri:
+      validate_certs: false
+      url: "https://{{ inventory_hostname }}:8501/v1/health/node/consul-server-{{ ansible_hostname }}"
+      headers: 
+        X-Consul-Token: "{{ consul_acl_token }}"
+    when: ("consul_server" in group_names)
+    register: consule_node_health
+  
+  - name: Print Consul Server health Data Variable
+    debug: 
+      var: consule_node_health
+    failed_when: consule_node_health.json[0].Status != "passing"
+    when: ("consul_server" in group_names)
+  
+  - name: Get Consul Client health Data
+    ansible.builtin.uri:
+      validate_certs: false
+      url: "https://{{ query('inventory_hostnames', 'consul_server')[0] }}:8501/v1/health/node/consul-client-{{ ansible_hostname }}"
+      headers: 
+        X-Consul-Token: "{{ consul_acl_token }}"
+    when: ("consul_client" in group_names)
+    register: consule_node_health
+  
+  - name: Print Variable
+    debug: 
+      var: consule_node_health
+    failed_when: consule_node_health.json[0].Status != "passing"
+    when: ("consul_client" in group_names)
+  
+  - name: Get Consul Health Service
+    ansible.builtin.uri:
+      validate_certs: false
+      url: "https://{{ inventory_hostname }}:8501/v1/health/service/consul?passing=true"
+      headers: 
+        X-Consul-Token: "{{ consul_acl_token }}"
+    run_once: true
+    register: consul_health_service
+  
+  - name: Check Consul Health Service
+    ansible.builtin.debug:
+      var: consul_health_service
+    failed_when: consul_health_service.json | length != query('inventory_hostnames', 'consul_server') | length
+    when: consul_health_service.json | length != query('inventory_hostnames', 'consul_server') | length
+  

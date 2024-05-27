@@ -1,0 +1,3 @@
+---
+consul_config_dir: "/etc/consul.d"
+consul_acl_token: ""

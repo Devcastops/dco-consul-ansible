@@ -1,0 +1,82 @@
+---
+
+  - name: Update apt
+    ansible.builtin.apt:
+      update_cache: true
+  
+  - name: Install Packages
+    ansible.builtin.package:
+      name: "{{item}}"
+    with_items:
+      - unzip
+      - jq
+  
+  - name: Create Consul Group
+    group:
+      name: "{{ consul_group }}"
+  
+  - name: Create Consul User
+    user:
+      name: "{{ consul_user }}"
+      group: "{{ consul_group }}"
+  
+  - name: Install consul
+    ansible.builtin.get_url:
+      url: https://releases.hashicorp.com/consul/{{ consul_version }}/consul_{{ consul_version }}_linux_amd64.zip
+      dest: /tmp/consul{{ consul_version }}.zip
+  
+  - name: Unzip Consul
+    unarchive:
+      src: /tmp/consul{{ consul_version }}.zip
+      dest: /usr/local/bin
+      remote_src: true
+    notify: Restart Consul
+  
+  - name: Wipe Consul Data
+    file:
+      path: "{{ consul_data_dir }}"
+      state: absent
+    when: consul_server_wipe_data
+    notify: Restart Consul
+  
+  - name: Create Consul Directory
+    file:
+      path: "{{item}}"
+      state: directory
+      owner: consul
+      group: consul
+      mode: "0750"
+    with_items: 
+      - "{{ consul_config_dir }}"
+      - "{{ consul_data_dir }}"
+  
+  
+  - name: Register Key if exist
+    command:
+      cmd: cat {{consul_config_dir}}/acl_key
+    register: encryption_key
+    run_once: true
+    when: ("consul_server" in group_names)
+    failed_when: 
+      - encryption_key.rc != 0
+      - '"No such file or directory" not in encryption_key.stderr'
+  
+  - name: Registering Key
+    set_fact: 
+      key_val : "{{encryption_key.stdout}}"
+      read_from_file: true
+  
+  
+  
+  - name: Add Consul Common Config
+    template:
+      src: common-config.hcl.j2
+      dest: "{{consul_config_dir}}/common-config.hcl"
+    notify: Restart Consul
+  
+  - name: Add Consul.Service
+    template:
+      src: consul.service.j2
+      dest: /etc/systemd/system/consul.service
+    notify: Restart Consul
+  

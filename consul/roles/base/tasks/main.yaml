@@ -65,8 +65,7 @@
     set_fact: 
       key_val : "{{encryption_key.stdout}}"
       read_from_file: true
-  
-  
+    when: ("consul_server" in group_names)
   
   - name: Add Consul Common Config
     template:

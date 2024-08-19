@@ -47,8 +47,8 @@ auto_config {
         authorization {
             enabled = true
             static {
-                oidc_discovery_url= "https://vault.devcastops.com:8200/v1/identity/oidc/provider/core_consul_auto_config"
-                bound_issuer = "https://vault.devcastops.com:8200/v1/identity/oidc/provider/core_consul_auto_config"
+                oidc_discovery_url= "https://vault.devcastops.com:8200/v1/identity/oidc"
+                bound_issuer = "https://vault.devcastops.com:8200/v1/identity/oidc"
                 bound_audiences = ["consul-cluster-dc1"]
                 claim_mappings = {
                     "/consul/hostname"= "node_name"

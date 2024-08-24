@@ -44,18 +44,15 @@ connect {
   enabled = true
 }
 auto_config {
-        authorization {
-            enabled = true
-            static {
-                oidc_discovery_url= "https://vault.devcastops.com:8200/v1/identity/oidc"
-                bound_issuer = "https://vault.devcastops.com:8200/v1/identity/oidc"
-                bound_audiences = ["consul-cluster-dc1"]
-                claim_mappings = {
-                    "/consul/hostname"= "node_name"
-                }
-                claim_assertions= [
-                    "value.node_name == \"${node}\""
-                ]
-            }
-        }
+  authorization {
+    enabled = true
+    static {
+      oidc_discovery_url= "https://vault.devcastops.com:8200/v1/identity/oidc"
+      bound_issuer = "https://vault.devcastops.com:8200/v1/identity/oidc"
+      bound_audiences = ["consul-cluster-dc1", "zm76YSUV0amlO0JeN9YHXpOkACHISCAb"]
+      claim_mappings = {
+          "/consul/hostname"= "node_name"
+      }
     }
+  }
+}

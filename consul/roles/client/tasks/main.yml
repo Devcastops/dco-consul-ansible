@@ -15,7 +15,7 @@
       VAULT_ADDR: "{{ VAULT_ADDR }}"
       VAULT_TOKEN: "{{ VAULT_TOKEN }}"
     command:
-      cmd: vault read -format=json identity/oidc/token/{{ auto_config_vault_role }}
+      cmd: "{{vault_binary_loc}} read -format=json identity/oidc/token/{{ auto_config_vault_role }}"
     register: jwt_out
     delegate_to: 127.0.0.1
 

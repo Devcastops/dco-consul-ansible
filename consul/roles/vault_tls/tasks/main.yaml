@@ -1,0 +1,19 @@
+---
+
+- name     : generate server cert
+  uri      :
+    url            : "{{vault_addr}}/v1/{{vault_pki_mount}}/issue/{{vault_pki_role}}"
+    return_content : true
+    method         : POST
+    headers        :
+      X-Vault-Token     : "{{vault_token}}"
+      X-Vault-Namespace : "{{vault_namespace}}"
+    body           :
+      common_name : server.{{data_center}}.{{consul_domain}}
+      ttl         : "{{cert_ttl}}"
+    body_format    : json
+  register : vault_cert_output
+
+- name : debug generation
+  debug:
+    var : vault_cert_output

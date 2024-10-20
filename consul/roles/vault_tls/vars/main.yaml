@@ -1,8 +1,12 @@
 ---
-cert_ttl        : 300
-consul_domain   : consul
-data_center     : dc1
-vault_addr      : https://vault.devcastops.com:8200
-vault_pki_mount : pki
-vault_pki_role  : consul
-vault_namespace : ""
+cert_ttl          : 300
+consul_domain     : consul
+data_center       : dc1
+vault_addr        : https://vault.devcastops.com:8200
+vault_pki_mount   : pki
+vault_pki_role    : consul
+vault_namespace   : ""
+consul_config_dir : "/etc/consul.d"
+consul_tls_dir    : "{{consul_config_dir}}/tls"
+consul_group      : consul
+consul_user       : consul

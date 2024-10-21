@@ -1,7 +1,7 @@
 ---
 # vars file for consul_base
 consul_server_wipe_data: false
-consul_version: 1.18.2
+consul_version: 1.20.0
 consul_config_dir: "/etc/consul.d"
 consul_data_dir: "/opt/consul/data"
 consul_group: consul

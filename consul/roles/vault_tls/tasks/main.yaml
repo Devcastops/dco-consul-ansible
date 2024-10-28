@@ -6,6 +6,7 @@
       owner: "{{ consul_user }}"
       group: "{{ consul_group }}"
       mode: "0750"
+
   - name     : generate server cert
     uri      :
       url            : "{{vault_addr}}/v1/{{vault_pki_mount}}/issue/{{vault_pki_role}}"
@@ -18,6 +19,7 @@
         common_name : server.{{data_center}}.{{consul_domain}}
         ttl         : "{{cert_ttl}}"
       body_format    : json
+    when: ("consul_servers" in group_names)
     register : vault_cert_output
 
   - name: load cert (doesn't log output)
@@ -32,4 +34,26 @@
         location: "{{consul_tls_dir}}/dc1-client-consul-0-key.pem"
       - cert: "{{vault_cert_output.json.data.certificate}}"
         location: "{{consul_tls_dir}}/dc1-client-consul-0.pem"
+    when: ("consul_servers" in group_names)
+    notify: Restart Consul
+
+  - name     : generate server cert
+    uri      :
+      url            : "{{vault_addr}}/v1/pki/issuer/consul/pem"
+      return_content : true
+      method         : GET
+    register : vault_ca_cert_output
+
+  - name : debug
+    debug:
+      var: vault_ca_cert_output
+
+  - name: load cert (doesn't log output)
+    copy:
+      content: "{{item.cert}}"
+      dest   : "{{item.location}}"
+    no_log: true
+    with_items: 
+      - cert: "{{vault_ca_cert_output.content}}"
+        location: "{{consul_tls_dir}}/consul-agent-ca.pem"
     notify: Restart Consul

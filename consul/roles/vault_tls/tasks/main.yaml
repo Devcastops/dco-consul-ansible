@@ -37,22 +37,18 @@
     when: ("consul_servers" in group_names)
     notify: Restart Consul
 
-  - name     : generate server cert
+  - name     : get ca
     uri      :
       url            : "{{vault_addr}}/v1/pki/issuer/consul/pem"
       return_content : true
       method         : GET
     register : vault_ca_cert_output
+    delegate_to: 127.0.0.1
 
-  - name : debug
-    debug:
-      var: vault_ca_cert_output
-
-  - name: load cert (doesn't log output)
+  - name: load ca (doesn't log output)
     copy:
       content: "{{item.cert}}"
       dest   : "{{item.location}}"
-    no_log: true
     with_items: 
       - cert: "{{vault_ca_cert_output.content}}"
         location: "{{consul_tls_dir}}/consul-agent-ca.pem"

@@ -4,3 +4,4 @@ consul_data_dir: "/opt/consul/data"
 consul_tls_dir: "{{consul_config_dir}}/tls"
 auto_config_vault_role: "consul-cluster-dc1"
 vault_binary_loc: "/usr/local/bin/vault" #needed as github actions puts it in a random location
+vault_address: "vault.devcastops.com:8200"

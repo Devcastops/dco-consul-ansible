@@ -40,6 +40,9 @@ tls {
     key_file = "{{ consul_tls_dir }}/dc1-server-consul-0-key.pem"
   }
 }
+auto_encrypt {
+  allow_tls = true
+}
 connect {
   enabled = true
 }

@@ -10,24 +10,13 @@
     with_items: 
       - "/etc/consul.d/token"
 
-  - name: Gen jwt token
-    environment: 
-      VAULT_ADDR: "{{ VAULT_ADDR }}"
-      VAULT_TOKEN: "{{ VAULT_TOKEN }}"
-    command:
-      cmd: "{{vault_binary_loc}} read -format=json identity/oidc/token/{{ auto_config_vault_role }}"
-    register: jwt_out
-    delegate_to: 127.0.0.1
-
-  - name: Load jwt in to consul client
-    copy:
-      dest: "/etc/consul.d/token/jwt"
-      content: "{{ (jwt_out.stdout | from_json).data.token }}"
-      mode: "0640"
-      group: "consul"
-
   - name: Add Consul Client config
     template:
       src: client-config.hcl.j2
       dest: "{{consul_config_dir}}/client-config.hcl"
-  
+
+  - name: Add bootstrap script
+    template:
+      src: 5-consul-bootstrap.sh.j2
+      dest: "/var/lib/cloud/scripts/per-boot/5-consul-bootstrap.sh"
+      mode: "0777"

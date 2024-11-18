@@ -2,17 +2,25 @@
 
 # get vault token
 
-export JWT=$(curl -H "Metadata-Flavor: Google" 'http://metadata/computeMetadata/v1/instance/service-accounts/default/identity?audience=vault')
+JWT=$(curl -H "Metadata-Flavor: Google" --data-urlencode "audience=vault/client" --data-urlencode "format=full" 'http://metadata/computeMetadata/v1/instance/service-accounts/default/identity')
 
-
+echo "{\"jwt\": \"$JWT\",\"role\": \"client\" }" > payload.json
 
 VAULT_TOKEN=$(curl \
     --request POST \
     --data @payload.json \
-    http://{{ vault_address }}/v1/auth/gcp/login) | jq ".data.token"
+    https://vault.devcastops.com:8200/v1/core/auth/gcp/login) | jq ".data.token"
 # get jwt
 
 
+CONSUL_JWT=$(curl \
+    -H "X-Vault-Token: $VAULT_TOKEN" \
+    https://vault.devcastops.com:8200/v1/identity/oidc/token/consul-cluster-dc1)| jq -r .data.token
+
 # load jwt in to file
 
+echo $CONSUL_JWT > /etc/consul.d/token/jwt
+
 # start consul
+
+sudo systemctl start consul

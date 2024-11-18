@@ -9,13 +9,13 @@ echo "{\"jwt\": \"$JWT\",\"role\": \"client\" }" > payload.json
 VAULT_TOKEN=$(curl \
     --request POST \
     --data @payload.json \
-    https://vault.devcastops.com:8200/v1/core/auth/gcp/login) | jq ".data.token"
+    https://vault.devcastops.com:8200/v1/auth/core/gcp/login | jq -r .auth.client_token)
 # get jwt
 
 
 CONSUL_JWT=$(curl \
     -H "X-Vault-Token: $VAULT_TOKEN" \
-    https://vault.devcastops.com:8200/v1/identity/oidc/token/consul-cluster-dc1)| jq -r .data.token
+    https://vault.devcastops.com:8200/v1/identity/oidc/token/consul-cluster-dc1 | jq -r .data.token)
 
 # load jwt in to file
 

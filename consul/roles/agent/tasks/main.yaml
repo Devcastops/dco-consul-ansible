@@ -1,0 +1,33 @@
+---
+
+- name: Create agent Directory
+  file:
+    path: "{{item}}"
+    state: directory
+    mode: "0750"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  with_items: 
+  - "{{ config_dir }}/consul"
+
+- name: load template files
+  template:
+    src: "cert.tpl"
+    dest: "{{ config_dir }}/consul/cert.tpl"
+    mode: "0440"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  notify:
+    - Restart agent
+
+
+- name: Load in agent config
+  template:
+    src: config.hcl.tpl
+    dest: "{{ config_dir }}/consul-config.hcl"
+    mode: "0440"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  notify:
+    - Restart agent
+

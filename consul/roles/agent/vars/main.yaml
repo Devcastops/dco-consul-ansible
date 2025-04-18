@@ -3,3 +3,4 @@ consul_group: consul
 consul_user: consul
 consul_config_dir: "/etc/consul.d"
 consul_tls_dir: "{{consul_config_dir}}/tls"
+type: client

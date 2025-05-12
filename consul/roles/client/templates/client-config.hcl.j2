@@ -5,6 +5,9 @@ connect {
   enabled = true
 }
 tls {
+  internal_rpc {
+    verify_server_hostname = true
+  }
   defaults{
     verify_incoming = true
     verify_outgoing = true

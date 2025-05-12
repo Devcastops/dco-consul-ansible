@@ -15,8 +15,8 @@
       src: client-config.hcl.j2
       dest: "{{consul_config_dir}}/client-config.hcl"
 
-  - name: Add bootstrap script
-    template:
-      src: 5-consul-bootstrap.sh.j2
-      dest: "/var/lib/cloud/scripts/per-boot/5-consul-bootstrap.sh"
-      mode: "0777"
+  # - name: Add bootstrap script
+  #   template:
+  #     src: 5-consul-bootstrap.sh.j2
+  #     dest: "/var/lib/cloud/scripts/per-boot/5-consul-bootstrap.sh"
+  #     mode: "0777"

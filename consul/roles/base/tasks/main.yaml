@@ -1,8 +1,12 @@
 ---
 
+  - name: Distribution
+    debug: msg="{{ ansible_distribution }}"
+
   - name: Update apt
     ansible.builtin.apt:
       update_cache: true
+    when: ansible_distribution == "ubuntu"
   
   - name: Install Packages
     ansible.builtin.package:

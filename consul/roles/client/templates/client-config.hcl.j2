@@ -15,7 +15,7 @@ tls {
 }
 
 
-bind_addr = "127.0.0.1"
+bind_addr = "{{ansible_default_ipv4.address}}"
 
 addresses {
   grpc  = {{'"{{ GetPublicInterfaces | include `type` `IPv4` | limit 1 | attr `address` }}"'}}

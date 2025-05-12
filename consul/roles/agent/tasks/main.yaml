@@ -20,6 +20,15 @@
   notify:
     - Restart agent
 
+- name: load template files
+  template:
+    src: "consul.tpl"
+    dest: "{{ config_dir }}/consul/consul.tpl"
+    mode: "0440"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  notify:
+    - Restart agent
 
 - name: Load in agent config
   template:

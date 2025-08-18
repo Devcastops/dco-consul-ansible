@@ -17,12 +17,7 @@ tls {
   }
 }
 
-
 bind_addr = "{{ansible_default_ipv4.address}}"
-
-addresses {
-  grpc  = {{'"{{ GetPublicInterfaces | include `type` `IPv4` | limit 1 | attr `address` }}"'}}
-}
 
 auto_encrypt {
   tls = true

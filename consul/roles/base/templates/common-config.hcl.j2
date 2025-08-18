@@ -1,2 +1,10 @@
 retry_join = ["{{ query('inventory_hostnames', 'consul_server') | join('","')}}"]
 
+addresses {
+  grpc  = "127.0.0.1"
+}
+
+ports {
+  grpc = 8502
+}
+

@@ -54,23 +54,6 @@
       - "{{ consul_config_dir }}"
       - "{{ consul_data_dir }}"
   
-  
-  - name: Register Key if exist
-    command:
-      cmd: cat {{consul_config_dir}}/acl_key
-    register: encryption_key
-    run_once: true
-    when: ("consul_server" in group_names)
-    failed_when: 
-      - encryption_key.rc != 0
-      - '"No such file or directory" not in encryption_key.stderr'
-  
-  - name: Registering Key
-    set_fact: 
-      key_val : "{{encryption_key.stdout}}"
-      read_from_file: true
-    when: ("consul_server" in group_names)
-  
   - name: Add Consul Common Config
     template:
       src: common-config.hcl.j2

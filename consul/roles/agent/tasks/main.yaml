@@ -40,7 +40,7 @@
   notify:
     - Restart agent
 
-- name: Load in agent config
+- name: Load in agent cert config
   template:
     src: cert_config.hcl.tpl
     dest: "{{ config_dir }}/consul-{{type}}-cert-config.hcl"

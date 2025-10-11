@@ -13,7 +13,7 @@
 - name: load template files
   template:
     src: "cert.tpl"
-    dest: "{{ config_dir }}/consul/cert.tpl"
+    dest: "{{ config_dir }}/consul/{{type}}_cert.tpl"
     mode: "0440"
     owner: "{{ consul_user }}"
     group: "{{ consul_group }}"

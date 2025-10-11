@@ -40,3 +40,12 @@
   notify:
     - Restart agent
 
+- name: Load in agent config
+  template:
+    src: cert_config.hcl.tpl
+    dest: "{{ config_dir }}/consul-{{type}}-cert-config.hcl"
+    mode: "0440"
+    owner: "{{ consul_user }}"
+    group: "{{ consul_group }}"
+  notify:
+    - Restart agent

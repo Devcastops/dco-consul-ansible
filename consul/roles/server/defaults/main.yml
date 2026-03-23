@@ -2,3 +2,6 @@
 # defaults file for consul_server
 
 packer_build: false
+
+consul_ext_tls_key_dest: ""
+consul_ext_tls_crt_dest: ""

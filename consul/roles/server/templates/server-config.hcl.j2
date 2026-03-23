@@ -23,11 +23,13 @@ addresses {
 }
 bind_addr = "{{ inventory_hostname }}"
 tls {
+  {% if consul_ext_tls_crt_dest != "" and consul_ext_tls_key_dest != "" %}
   https {
     cert_file = "{{ consul_ext_tls_crt_dest }}"
     key_file = "{{ consul_ext_tls_key_dest }}"
     verify_incoming = false
   }
+  {% endif %}
   internal_rpc {
     verify_server_hostname = true
   }

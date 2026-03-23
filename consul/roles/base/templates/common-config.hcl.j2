@@ -1,4 +1,6 @@
+{% if packer_build == false %}
 retry_join = ["{{ query('inventory_hostnames', 'consul_server') | join('","')}}"]
+{% endif %}
 
 addresses {
   grpc  = "127.0.0.1"

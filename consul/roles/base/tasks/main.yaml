@@ -6,7 +6,7 @@
   - name: Update apt
     ansible.builtin.apt:
       update_cache: true
-    when: ansible_distribution == "ubuntu"
+    when: ansible_distribution == "Ubuntu"
   
   - name: Install Packages
     ansible.builtin.package:

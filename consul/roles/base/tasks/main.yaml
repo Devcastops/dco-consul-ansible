@@ -68,8 +68,10 @@
   
 
   - name: Install dnsmasq
-    ansible.builtin.package:
+    ansible.builtin.apt:
       name: dnsmasq
+      state: present
+      update_cache: false
 
   - name: Configure dnsmasq to forward .consul to Consul DNS
     ansible.builtin.copy:

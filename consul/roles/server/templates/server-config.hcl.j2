@@ -29,6 +29,10 @@ tls {
     key_file = "{{ consul_ext_tls_key_dest }}"
     verify_incoming = false
   }
+  {% else %}
+  https {
+    verify_incoming = true
+  }
   {% endif %}
   internal_rpc {
     verify_server_hostname = true

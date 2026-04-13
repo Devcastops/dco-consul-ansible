@@ -67,23 +67,36 @@
     notify: Restart Consul
   
 
-  - name: Set up resolved folder
-    file:
-      path: /etc/systemd/resolved.conf.d
-      state: directory
-      owner: root
-      group: root
-      mode: "0755"
+  - name: Install dnsmasq
+    ansible.builtin.package:
+      name: dnsmasq
 
-  - name: Add resolved config
-    copy:
-      content: |
-        [Resolve]
-        DNS=127.0.0.1:8600
-        DNSSEC=false
-        Domains=~consul
-      dest: /etc/systemd/resolved.conf.d/consul.conf
+  - name: Configure dnsmasq to forward .consul to Consul DNS
+    ansible.builtin.copy:
+      dest: /etc/dnsmasq.d/10-consul
       owner: root
       group: root
-      mode: "0644"
-    notify: Restart systemd-resolved
+      mode: '0644'
+      content: |
+        server=/consul/127.0.0.1#8600
+        bind-interfaces
+        listen-address=127.0.0.1
+        no-resolv
+        server=169.254.169.254
+    notify: Restart dnsmasq
+
+  - name: Disable systemd-resolved (dnsmasq takes over)
+    ansible.builtin.systemd:
+      name: systemd-resolved
+      state: stopped
+      enabled: false
+
+  - name: Remove systemd-resolved symlink and set static resolv.conf
+    ansible.builtin.copy:
+      dest: /etc/resolv.conf
+      owner: root
+      group: root
+      mode: '0644'
+      force: true
+      content: |
+        nameserver 127.0.0.1

@@ -8,10 +8,8 @@
     daemon_reload: true
   when: not packer_build
 
-- name: Restart systemd-resolved
-  systemd:
-    name: systemd-resolved.service
+- name: Restart dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
     state: restarted
     enabled: true
-    daemon_reload: true
-  when: not packer_build

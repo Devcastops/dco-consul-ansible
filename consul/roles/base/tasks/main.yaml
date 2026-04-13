@@ -87,6 +87,13 @@
         server=169.254.169.254
     notify: Restart dnsmasq
 
+  - name: Enable and start dnsmasq immediately
+    ansible.builtin.systemd:
+      name: dnsmasq
+      state: started
+      enabled: true
+      daemon_reload: true
+
   - name: Disable systemd-resolved (dnsmasq takes over)
     ansible.builtin.systemd:
       name: systemd-resolved

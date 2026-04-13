@@ -14,3 +14,5 @@ ports {
 acl = {
   enabled = true
 }
+
+recursors = ["{{ consul_dns_recursors | join('\",\"') }}"]

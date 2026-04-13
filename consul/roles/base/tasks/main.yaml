@@ -66,3 +66,24 @@
       dest: /etc/systemd/system/consul.service
     notify: Restart Consul
   
+
+  - name: Set up resolved folder
+    file:
+      path: /etc/systemd/resolved.conf.d
+      state: directory
+      owner: root
+      group: root
+      mode: "0755"
+
+  - name: Add resolved config
+    copy:
+      content: |
+        [Resolve]
+        DNS=127.0.0.1:8600
+        DNSSEC=false
+        Domains=~consul
+      dest: /etc/systemd/resolved.conf.d/consul.conf
+      owner: root
+      group: root
+      mode: "0644"
+    notify: Restart systemd-resolved

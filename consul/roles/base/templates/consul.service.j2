@@ -2,8 +2,13 @@
 Description="HashiCorp Consul - A service mesh solution"
 Documentation=https://www.consul.io/
 Requires=network-online.target
+{% if vault_colocated %}
+Requires=vault.service
+{% endif %}
 After=network-online.target
 ConditionFileNotEmpty={{consul_config_dir}}/common-config.hcl
+ConditionFileExists={{ trigger_file_location }}
+
 
 [Service]
 User={{consul_user}}

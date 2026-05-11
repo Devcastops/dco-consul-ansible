@@ -66,6 +66,11 @@
       dest: /etc/systemd/system/consul.service
     notify: Restart Consul
   
+  - name: Enable Consul Service
+    systemd:
+      name: consul.service
+      enabled: true
+  
 
   - name: Install dnsmasq
     ansible.builtin.apt:

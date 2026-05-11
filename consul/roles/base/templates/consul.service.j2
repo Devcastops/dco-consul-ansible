@@ -7,7 +7,7 @@ Requires=vault.service
 {% endif %}
 After=network-online.target
 ConditionFileNotEmpty={{consul_config_dir}}/common-config.hcl
-ConditionFileExists={{ trigger_file_location }}
+ConditionPathExists={{ trigger_file_location }}
 
 
 [Service]

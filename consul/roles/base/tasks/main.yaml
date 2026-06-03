@@ -72,7 +72,6 @@
       enabled: true
 
   - name: Preserve systemd-resolved DNS config before takeover
-    when: consul_base_preserve_resolved | bool
     block:
     - name: Find the most authoritative pre-existing resolver file
       ansible.builtin.stat:

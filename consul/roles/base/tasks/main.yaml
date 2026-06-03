@@ -70,7 +70,60 @@
     systemd:
       name: consul.service
       enabled: true
-  
+
+  - name: Preserve systemd-resolved DNS config before takeover
+    when: consul_base_preserve_resolved | bool
+    block:
+    - name: Find the most authoritative pre-existing resolver file
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /run/systemd/resolve/resolv.conf
+        - /run/systemd/resolve/stub-resolv.conf
+        - /etc/resolv.conf
+      register: _resolv_candidates
+
+    - name: Select first existing resolver file
+      ansible.builtin.set_fact:
+        _resolv_src: "{{ (_resolv_candidates.results
+                          | selectattr('stat.exists', 'eq', true)
+                          | map(attribute='stat.path') | list | first) | default('') }}"
+
+    - name: Read existing resolver config
+      ansible.builtin.slurp:
+        src: "{{ _resolv_src }}"
+      register: _resolv_raw
+      when: _resolv_src | length > 0
+
+    - name: Parse search domains and upstream nameservers
+      ansible.builtin.set_fact:
+        _resolv_lines: >-
+          {{ (_resolv_raw.content | default('') | b64decode).splitlines()
+              | map('trim') | reject('match', '^#') | list }}
+      when: _resolv_src | length > 0
+
+    - name: Capture search domains (single 'search ...' line)
+      ansible.builtin.set_fact:
+        consul_base_search_domains: >-
+          {{ (_resolv_lines | default([])
+              | select('match', '^search\s+')
+              | map('regex_replace', '^search\s+', '')
+              | list | first | default('')) }}
+
+    - name: Capture upstream nameservers (excluding loopback stubs)
+      ansible.builtin.set_fact:
+        consul_base_upstream_dns: >-
+          {{ _resolv_lines | default([])
+              | select('match', '^nameserver\s+')
+              | map('regex_replace', '^nameserver\s+', '')
+              | reject('match', '^127\.')
+              | list }}
+
+    - name: Show what we preserved
+      ansible.builtin.debug:
+        msg:
+          - "search domains: '{{ consul_base_search_domains | default('') }}'"
+          - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
 
   - name: Install dnsmasq
     ansible.builtin.apt:
@@ -89,7 +142,14 @@
         bind-interfaces
         listen-address=127.0.0.1
         no-resolv
+        {% set upstreams = consul_base_upstream_dns | default([]) %}
+        {% if upstreams | length > 0 %}
+        {% for ns in upstreams %}
+        server={{ ns }}
+        {% endfor %}
+        {% else %}
         server=169.254.169.254
+        {% endif %}
     notify: Restart dnsmasq
 
   - name: Enable and start dnsmasq immediately
@@ -114,3 +174,4 @@
       force: true
       content: |
         nameserver 127.0.0.1
+        search {{ consul_base_search_domains }}

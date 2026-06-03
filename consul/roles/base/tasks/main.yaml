@@ -159,6 +159,8 @@
         bind-interfaces
         listen-address=127.0.0.1
         no-resolv
+        bogus-priv
+        domain-needed
         {% set upstreams = consul_base_upstream_dns | default([]) %}
         {% if upstreams | length > 0 %}
         {% for ns in upstreams %}
@@ -168,6 +170,24 @@
         server=169.254.169.254
         {% endif %}
     notify: Restart dnsmasq
+
+  - name: Disable sudo FQDN reverse lookup
+    ansible.builtin.copy:
+      dest: /etc/sudoers.d/10-no-fqdn
+      content: "Defaults !fqdn\n"
+      mode: '0440'
+      owner: root
+      group: root
+      validate: 'visudo -cf %s'
+    become: true
+
+  - name: Ensure /etc/hosts wins over DNS
+    ansible.builtin.lineinfile:
+      path: /etc/nsswitch.conf
+      regexp: '^hosts:'
+      line: 'hosts: files dns'
+      state: present
+    become: true
 
   - name: Enable and start dnsmasq immediately
     ansible.builtin.systemd:
@@ -206,3 +226,12 @@
       content: |
         nameserver 127.0.0.1
         search {{ consul_base_search_domains }}
+
+
+  - name: DIAG resolver latency
+    shell: |
+      for i in 1 2 3; do /usr/bin/time -f 'sudo=%E' sudo -n true; done
+      for ip in 127.0.0.1 127.0.1.1; do /usr/bin/time -f "ptr_$ip=%E" dig +tries=1 +time=2 -x $ip @127.0.0.1 +short; done
+      /usr/bin/time -f 'getent=%E' getent group consul
+    become: true
+    changed_when: false

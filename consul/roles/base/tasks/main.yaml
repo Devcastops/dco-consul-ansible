@@ -71,6 +71,24 @@
       name: consul.service
       enabled: true
 
+
+  - name: Ensure self-hostname resolves via /etc/hosts (kills sudo DNS latency)
+    ansible.builtin.lineinfile:
+      path: /etc/hosts
+      regexp: '^127\.0\.1\.1\s'
+      line: "127.0.1.1 {{ ansible_hostname }}"
+      state: present
+    become: true
+
+  - name: Manage /etc/hosts dynamically on every boot
+    ansible.builtin.copy:
+      dest: /etc/cloud/cloud.cfg.d/99-manage-etc-hosts.cfg
+      content: |
+        manage_etc_hosts: true
+      mode: '0644'
+    become: true
+
+
   - name: Preserve systemd-resolved DNS config before takeover
     block:
     - name: Find the most authoritative pre-existing resolver file
@@ -157,6 +175,20 @@
       state: started
       enabled: true
       daemon_reload: true
+  - name: Verify dnsmasq actually started
+    ansible.builtin.command: systemctl is-active --quiet dnsmasq
+    register: _dnsmasq_active
+    changed_when: false
+    failed_when: false
+
+  - name: Dump dnsmasq diagnostics on failure
+    when: _dnsmasq_active.rc != 0
+    block:
+      - ansible.builtin.command: journalctl -u dnsmasq -n 100 --no-pager
+        register: _dnsmasq_log
+        changed_when: false
+      - ansible.builtin.fail:
+          msg: "dnsmasq failed to start:\n{{ _dnsmasq_log.stdout }}"
 
   - name: Disable systemd-resolved (dnsmasq takes over)
     ansible.builtin.systemd:

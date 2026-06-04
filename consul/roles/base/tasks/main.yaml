@@ -142,6 +142,15 @@
           - "search domains: '{{ consul_base_search_domains | default('') }}'"
           - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
 
+  - name: Ensure /etc/dnsmasq.d exists (package not yet installed)
+    ansible.builtin.file:
+      path: /etc/dnsmasq.d
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+    become: true
+
   - name: Configure dnsmasq to forward .consul to Consul DNS
     ansible.builtin.copy:
       dest: /etc/dnsmasq.d/10-consul

@@ -1,5 +1,32 @@
 ---
 
+
+  - name: Disable sudo FQDN reverse lookup
+    ansible.builtin.copy:
+      dest: /etc/sudoers.d/10-no-fqdn
+      content: "Defaults !fqdn\n"
+      mode: '0440'
+      owner: root
+      group: root
+      validate: 'visudo -cf %s'
+    become: true
+
+  - name: Ensure /etc/hosts wins over DNS
+    ansible.builtin.lineinfile:
+      path: /etc/nsswitch.conf
+      regexp: '^hosts:'
+      line: 'hosts: files dns'
+      state: present
+    become: true
+
+  - name: Ensure self-hostname resolves via /etc/hosts (kills sudo DNS latency)
+    ansible.builtin.lineinfile:
+      path: /etc/hosts
+      regexp: '^127\.0\.1\.1\s'
+      line: "127.0.1.1 {{ ansible_hostname }}"
+      state: present
+    become: true
+
   - name: Distribution
     debug: msg="{{ ansible_distribution }}"
 
@@ -70,15 +97,6 @@
     systemd:
       name: consul.service
       enabled: true
-
-
-  - name: Ensure self-hostname resolves via /etc/hosts (kills sudo DNS latency)
-    ansible.builtin.lineinfile:
-      path: /etc/hosts
-      regexp: '^127\.0\.1\.1\s'
-      line: "127.0.1.1 {{ ansible_hostname }}"
-      state: present
-    become: true
 
   - name: Manage /etc/hosts dynamically on every boot
     ansible.builtin.copy:
@@ -174,30 +192,19 @@
         {% endif %}
     notify: Restart dnsmasq
 
+
+  - name: Disable dnsmasq resolvconf integration
+    ansible.builtin.copy:
+      dest: /etc/default/dnsmasq
+      mode: '0644'
+      content: "IGNORE_RESOLVCONF=yes\nDNSMASQ_EXCEPT=lo\n"
+    become: true
+
   - name: Install dnsmasq
     ansible.builtin.apt:
       name: dnsmasq
       state: present
       update_cache: false
-
-
-  - name: Disable sudo FQDN reverse lookup
-    ansible.builtin.copy:
-      dest: /etc/sudoers.d/10-no-fqdn
-      content: "Defaults !fqdn\n"
-      mode: '0440'
-      owner: root
-      group: root
-      validate: 'visudo -cf %s'
-    become: true
-
-  - name: Ensure /etc/hosts wins over DNS
-    ansible.builtin.lineinfile:
-      path: /etc/nsswitch.conf
-      regexp: '^hosts:'
-      line: 'hosts: files dns'
-      state: present
-    become: true
 
   - name: Enable and start dnsmasq immediately
     ansible.builtin.systemd:

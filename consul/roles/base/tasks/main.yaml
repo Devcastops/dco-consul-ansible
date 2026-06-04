@@ -1,14 +1,16 @@
 ---
 
 
-  - name: Disable sudo FQDN reverse lookup
+  - name: Sudo without DNS-dependent host canonicalization
     ansible.builtin.copy:
-      dest: /etc/sudoers.d/10-no-fqdn
-      content: "Defaults !fqdn\n"
-      mode: '0440'
+      dest: /etc/sudoers.d/00-no-dns
       owner: root
       group: root
-      validate: 'visudo -cf %s'
+      mode: '0440'
+      content: |
+        Defaults !fqdn
+        Defaults !log_host
+      validate: '/usr/sbin/visudo -cf %s'
     become: true
 
   - name: Ensure /etc/hosts wins over DNS
@@ -109,56 +111,51 @@
 
   - name: Preserve systemd-resolved DNS config before takeover
     block:
-    - name: Find the most authoritative pre-existing resolver file
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /run/systemd/resolve/resolv.conf
-        - /run/systemd/resolve/stub-resolv.conf
-        - /etc/resolv.conf
-      register: _resolv_candidates
 
-    - name: Select first existing resolver file
-      ansible.builtin.set_fact:
-        _resolv_src: "{{ (_resolv_candidates.results
-                          | selectattr('stat.exists', 'eq', true)
-                          | map(attribute='stat.path') | list | first) | default('') }}"
-
-    - name: Read existing resolver config
+    - name: Read resolved upstreams (authoritative)
       ansible.builtin.slurp:
-        src: "{{ _resolv_src }}"
-      register: _resolv_raw
-      when: _resolv_src | length > 0
+        src: /run/systemd/resolve/resolv.conf
+      register: _resolved_conf
+      become: true
 
-    - name: Parse search domains and upstream nameservers
-      ansible.builtin.set_fact:
-        _resolv_lines: >-
-          {{ (_resolv_raw.content | default('') | b64decode).splitlines()
-              | map('trim') | reject('match', '^#') | list }}
-      when: _resolv_src | length > 0
-
-    - name: Capture search domains (single 'search ...' line)
-      ansible.builtin.set_fact:
-        consul_base_search_domains: >-
-          {{ (_resolv_lines | default([])
-              | select('match', '^search\s+')
-              | map('regex_replace', '^search\s+', '')
-              | list | first | default('')) }}
-
-    - name: Capture upstream nameservers (excluding loopback stubs)
+    - name: Parse non-loopback upstream nameservers
       ansible.builtin.set_fact:
         consul_base_upstream_dns: >-
-          {{ _resolv_lines | default([])
-              | select('match', '^nameserver\s+')
-              | map('regex_replace', '^nameserver\s+', '')
-              | reject('match', '^127\.')
-              | list }}
+          {{ (_resolved_conf.content | b64decode).splitlines()
+            | map('trim') | reject('match', '^#')
+            | select('match', '^nameserver\s+')
+            | map('regex_replace', '^nameserver\s+', '')
+            | reject('match', '^127\.') | list }}
 
     - name: Show what we preserved
       ansible.builtin.debug:
         msg:
           - "search domains: '{{ consul_base_search_domains | default('') }}'"
           - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
+
+  - name: PRE-DNSMASQ ground truth (resolver + sudo startup)
+    ansible.builtin.shell: |
+      set -o pipefail
+      {
+        echo "=== PRE_DNSMASQ $(date -Is) ==="
+        echo "[hostname]"; hostname; hostname -f || true
+        echo "[resolv_link]"; readlink -f /etc/resolv.conf || true
+        echo "[/etc/resolv.conf]"; cat /etc/resolv.conf || true
+        echo "[/run/systemd/resolve/resolv.conf]"; cat /run/systemd/resolve/resolv.conf || true
+        echo "[nsswitch hosts]"; grep '^hosts:' /etc/nsswitch.conf || true
+        echo "[/etc/hosts]"; cat /etc/hosts || true
+        echo "[getent hostname]"; timeout 5s getent hosts "$(hostname)" || echo "getent_rc=$?"
+        echo "[sudo -n true timing]"; timeout 8s bash -lc 'time sudo -n true' || echo "sudo_rc=$?"
+      } 2>&1
+    args:
+      executable: /bin/bash
+    become: false
+    changed_when: false
+    failed_when: false
+    register: pre_dns_diag
+
+  - ansible.builtin.debug:
+      var: pre_dns_diag.stdout_lines
 
   - name: Ensure /etc/dnsmasq.d exists (package not yet installed)
     ansible.builtin.file:
@@ -169,28 +166,21 @@
       mode: '0755'
     become: true
 
-  - name: Configure dnsmasq to forward .consul to Consul DNS
+  - name: Configure dnsmasq consul forwarding (no resolver takeover)
     ansible.builtin.copy:
       dest: /etc/dnsmasq.d/10-consul
       owner: root
       group: root
       mode: '0644'
       content: |
-        server=/consul/127.0.0.1#8600
         bind-interfaces
-        listen-address=127.0.0.1
+        listen-address=127.0.0.54
         no-resolv
+        server=/consul/127.0.0.1#8600
+        server=127.0.0.53
         bogus-priv
         domain-needed
-        {% set upstreams = consul_base_upstream_dns | default([]) %}
-        {% if upstreams | length > 0 %}
-        {% for ns in upstreams %}
-        server={{ ns }}
-        {% endfor %}
-        {% else %}
-        server=169.254.169.254
-        {% endif %}
-    notify: Restart dnsmasq
+    become: true
 
 
   - name: Disable dnsmasq resolvconf integration
@@ -235,23 +225,39 @@
       - ansible.builtin.fail:
           msg: "dnsmasq failed to start:\n{{ _dnsmasq_log.stdout }}"
 
-  - name: Remove systemd-resolved symlink and set static resolv.conf
+
+  - name: Route .consul to local dnsmasq for current boot
+    ansible.builtin.command: "{{ item }}"
+    loop:
+      - resolvectl dns lo 127.0.0.54
+      - resolvectl domain lo ~consul
+    changed_when: false
+    become: true
+
+  - name: Persist .consul split-DNS routing across reboots
     ansible.builtin.copy:
-      dest: /etc/resolv.conf
-      owner: root
-      group: root
+      dest: /etc/systemd/system/consul-dns-route.service
       mode: '0644'
-      force: true
       content: |
-        nameserver 127.0.0.1
-        search {{ consul_base_search_domains }}
+        [Unit]
+        Description=Route .consul DNS to local dnsmasq via systemd-resolved
+        After=systemd-resolved.service dnsmasq.service
+        Wants=systemd-resolved.service dnsmasq.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/resolvectl dns lo 127.0.0.54
+        ExecStart=/usr/bin/resolvectl domain lo ~consul
+        [Install]
+        WantedBy=multi-user.target
+    become: true
 
-  - name: Disable systemd-resolved (dnsmasq takes over)
+  - name: Enable consul DNS route unit on boot
     ansible.builtin.systemd:
-      name: systemd-resolved
-      state: stopped
-      enabled: false
-
+      name: consul-dns-route.service
+      enabled: true
+      daemon_reload: true
+    become: true
 
   - name: DIAG resolver latency
     shell: |

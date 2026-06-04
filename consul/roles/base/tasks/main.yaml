@@ -142,12 +142,6 @@
           - "search domains: '{{ consul_base_search_domains | default('') }}'"
           - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
 
-  - name: Install dnsmasq
-    ansible.builtin.apt:
-      name: dnsmasq
-      state: present
-      update_cache: false
-
   - name: Configure dnsmasq to forward .consul to Consul DNS
     ansible.builtin.copy:
       dest: /etc/dnsmasq.d/10-consul
@@ -170,6 +164,13 @@
         server=169.254.169.254
         {% endif %}
     notify: Restart dnsmasq
+
+  - name: Install dnsmasq
+    ansible.builtin.apt:
+      name: dnsmasq
+      state: present
+      update_cache: false
+
 
   - name: Disable sudo FQDN reverse lookup
     ansible.builtin.copy:
@@ -195,6 +196,14 @@
       state: started
       enabled: true
       daemon_reload: true
+
+  - name: Reset any failed dnsmasq state
+    ansible.builtin.command: systemctl reset-failed dnsmasq
+    changed_when: false
+    failed_when: false
+    become: true
+
+
   - name: Verify dnsmasq actually started
     ansible.builtin.command: systemctl is-active --quiet dnsmasq
     register: _dnsmasq_active

@@ -187,14 +187,35 @@
     ansible.builtin.copy:
       dest: /etc/default/dnsmasq
       mode: '0644'
-      content: "IGNORE_RESOLVCONF=yes\nDNSMASQ_EXCEPT=lo\n"
+      content: "IGNORE_RESOLVCONF=yes\n"
     become: true
+
 
   - name: Install dnsmasq
     ansible.builtin.apt:
       name: dnsmasq
       state: present
       update_cache: false
+  
+  - name: POST-INSTALL ground truth (did install auto-start break sudo/resolver?)
+    ansible.builtin.shell: |
+      {
+        echo "=== POST_INSTALL $(date -Is) ==="
+        echo "[sudo -n true timing]"; timeout 8s bash -lc 'time sudo -n true' || echo "sudo_rc=$?"
+        echo "[dnsmasq active]"; systemctl is-active dnsmasq || true
+        echo "[listen :53]"; ss -lntu 'sport = :53' || true
+        echo "[resolv_link]"; readlink -f /etc/resolv.conf || true
+        echo "[resolved active]"; systemctl is-active systemd-resolved || true
+      } 2>&1
+    args:
+      executable: /bin/bash
+    become: false
+    changed_when: false
+    failed_when: false
+    register: post_install_diag
+
+  - ansible.builtin.debug:
+      var: post_install_diag.stdout_lines
 
   - name: Enable and start dnsmasq immediately
     ansible.builtin.systemd:

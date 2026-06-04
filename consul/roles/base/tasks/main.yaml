@@ -174,7 +174,7 @@
       mode: '0644'
       content: |
         bind-interfaces
-        listen-address=127.0.0.54
+        listen-address=127.0.0.1
         no-resolv
         server=/consul/127.0.0.1#8600
         server=127.0.0.53
@@ -250,7 +250,7 @@
   - name: Route .consul to local dnsmasq for current boot
     ansible.builtin.command: "{{ item }}"
     loop:
-      - resolvectl dns lo 127.0.0.54
+      - resolvectl dns lo 127.0.0.1
       - resolvectl domain lo ~consul
     changed_when: false
     become: true
@@ -267,7 +267,7 @@
         [Service]
         Type=oneshot
         RemainAfterExit=yes
-        ExecStart=/usr/bin/resolvectl dns lo 127.0.0.54
+        ExecStart=/usr/bin/resolvectl dns lo 127.0.0.1
         ExecStart=/usr/bin/resolvectl domain lo ~consul
         [Install]
         WantedBy=multi-user.target

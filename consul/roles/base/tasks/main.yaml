@@ -189,20 +189,32 @@
         domain-needed
     become: true
 
-
-  - name: Disable dnsmasq resolvconf integration
-    ansible.builtin.copy:
-      dest: /etc/default/dnsmasq
-      mode: '0644'
-      content: "IGNORE_RESOLVCONF=yes\n"
-    become: true
-
-
   - name: Install dnsmasq
     ansible.builtin.apt:
       name: dnsmasq
       state: present
       update_cache: false
+      # Block the maintainer-script auto-start: at this point /etc/default/dnsmasq
+      # may still lack CONFIG_DIR, and resolved already holds 127.0.0.53:53.
+      # We start it explicitly below, after the defaults are correct.
+      policy_rc_d: 101
+
+  - name: Ensure dnsmasq loads /etc/dnsmasq.d drop-ins (preserve distro CONFIG_DIR)
+    ansible.builtin.lineinfile:
+      path: /etc/default/dnsmasq
+      regexp: '^\s*#?\s*CONFIG_DIR='
+      line: 'CONFIG_DIR=/etc/dnsmasq.d,.dpkg-dist,.dpkg-old,.dpkg-new'
+      state: present
+    become: true
+
+  - name: Disable dnsmasq resolvconf integration (without clobbering defaults)
+    ansible.builtin.lineinfile:
+      path: /etc/default/dnsmasq
+      regexp: '^\s*#?\s*IGNORE_RESOLVCONF='
+      line: 'IGNORE_RESOLVCONF=yes'
+      state: present
+    become: true
+
   
   - name: POST-INSTALL ground truth (did install auto-start break resolver?)
     ansible.builtin.shell: |
@@ -215,6 +227,10 @@
         echo "[listen :53]"; timeout -k 2s 5s ss -lntu 'sport = :53'
         echo "[resolv_link]"; readlink -f /etc/resolv.conf
         echo "[resolved active]"; timeout -k 2s 5s systemctl is-active systemd-resolved
+        echo "[default dnsmasq]"; grep -nE '^(CONFIG_DIR|IGNORE_RESOLVCONF|DNSMASQ_OPTS|DNSMASQ_EXCEPT)=' /etc/default/dnsmasq || echo "NONE"
+        echo "[drop-in 10-consul.conf]"; cat /etc/dnsmasq.d/10-consul.conf || echo "MISSING"
+        echo "[dnsmasq --test]"; ( . /etc/default/dnsmasq 2>/dev/null; if [ -n "${CONFIG_DIR:-}" ]; then timeout -k 2s 5s /usr/sbin/dnsmasq --test -7 "$CONFIG_DIR"; else timeout -k 2s 5s /usr/sbin/dnsmasq --test; fi )
+
       } 2>&1
     args:
       executable: /bin/bash
@@ -232,6 +248,27 @@
       state: started
       enabled: true
       daemon_reload: true
+
+
+  - name: Verify dnsmasq is active and bound to loopback only
+    ansible.builtin.shell: |
+     exec </dev/null
+      set +e
+      export SYSTEMD_PAGER= PAGER=cat
+      {
+        echo "[dnsmasq active]"; timeout -k 2s 5s systemctl is-active dnsmasq
+        echo "[listen :53]"; timeout -k 2s 5s ss -lntu 'sport = :53'
+        echo "[dnsmasq cmdline]"; tr '\0' ' ' < "/proc/$(pidof dnsmasq | awk '{print $1}')/cmdline" 2>/dev/null; echo
+      } 2>&1
+    args:
+      executable: /bin/bash
+    become: true
+    changed_when: false
+    failed_when: false
+    register: dnsmasq_verify
+
+  - ansible.builtin.debug:
+      var: dnsmasq_verify.stdout_lines
 
   - name: Reset any failed dnsmasq state
     ansible.builtin.command: systemctl reset-failed dnsmasq

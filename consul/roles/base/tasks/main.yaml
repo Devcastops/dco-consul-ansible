@@ -10,6 +10,7 @@
       content: |
         Defaults !fqdn
         Defaults !log_host
+        Defaults:runner !pam_session, !pam_setcred
       validate: '/usr/sbin/visudo -cf %s'
     become: true
 

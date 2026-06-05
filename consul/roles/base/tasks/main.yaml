@@ -109,55 +109,6 @@
       mode: '0644'
     become: true
 
-
-  - name: Preserve systemd-resolved DNS config before takeover
-    block:
-
-    - name: Read resolved upstreams (authoritative)
-      ansible.builtin.slurp:
-        src: /run/systemd/resolve/resolv.conf
-      register: _resolved_conf
-      become: true
-
-    - name: Parse non-loopback upstream nameservers
-      ansible.builtin.set_fact:
-        consul_base_upstream_dns: >-
-          {{ (_resolved_conf.content | b64decode).splitlines()
-            | map('trim') | reject('match', '^#')
-            | select('match', '^nameserver\s+')
-            | map('regex_replace', '^nameserver\s+', '')
-            | reject('match', '^127\.') | list }}
-
-    - name: Show what we preserved
-      ansible.builtin.debug:
-        msg:
-          - "search domains: '{{ consul_base_search_domains | default('') }}'"
-          - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
-
-  - name: PRE-DNSMASQ ground truth (resolver startup)
-    ansible.builtin.shell: |
-      exec </dev/null
-      set +e
-      {
-        echo "=== PRE_DNSMASQ $(date -Is) ==="
-        echo "[hostname]"; timeout -k 2s 5s hostname; timeout -k 2s 5s hostname -f
-        echo "[resolv_link]"; readlink -f /etc/resolv.conf
-        echo "[/etc/resolv.conf]"; cat /etc/resolv.conf
-        echo "[/run/systemd/resolve/resolv.conf]"; cat /run/systemd/resolve/resolv.conf
-        echo "[nsswitch hosts]"; grep '^hosts:' /etc/nsswitch.conf
-        echo "[/etc/hosts]"; cat /etc/hosts
-        echo "[getent hostname]"; timeout -k 2s 5s getent hosts "$(hostname)" || echo "getent_rc=$?"
-      } 2>&1
-    args:
-      executable: /bin/bash
-    become: false
-    changed_when: false
-    failed_when: false
-    register: pre_dns_diag
-
-  - ansible.builtin.debug:
-      var: pre_dns_diag.stdout_lines
-
   - name: Ensure /etc/dnsmasq.d exists (package not yet installed)
     ansible.builtin.file:
       path: /etc/dnsmasq.d
@@ -215,60 +166,12 @@
       state: present
     become: true
 
-  
-  - name: POST-INSTALL ground truth (did install auto-start break resolver?)
-    ansible.builtin.shell: |
-      exec </dev/null
-      set +e
-      export SYSTEMD_PAGER= SYSTEMD_LESS=FRSXMK PAGER=cat
-      {
-        echo "=== POST_INSTALL $(date -Is) ==="
-        echo "[dnsmasq active]"; timeout -k 2s 5s systemctl is-active dnsmasq
-        echo "[listen :53]"; timeout -k 2s 5s ss -lntu 'sport = :53'
-        echo "[resolv_link]"; readlink -f /etc/resolv.conf
-        echo "[resolved active]"; timeout -k 2s 5s systemctl is-active systemd-resolved
-        echo "[default dnsmasq]"; grep -nE '^(CONFIG_DIR|IGNORE_RESOLVCONF|DNSMASQ_OPTS|DNSMASQ_EXCEPT)=' /etc/default/dnsmasq || echo "NONE"
-        echo "[drop-in 10-consul.conf]"; cat /etc/dnsmasq.d/10-consul.conf || echo "MISSING"
-        echo "[dnsmasq --test]"; ( . /etc/default/dnsmasq 2>/dev/null; if [ -n "${CONFIG_DIR:-}" ]; then timeout -k 2s 5s /usr/sbin/dnsmasq --test -7 "$CONFIG_DIR"; else timeout -k 2s 5s /usr/sbin/dnsmasq --test; fi )
-
-      } 2>&1
-    args:
-      executable: /bin/bash
-    become: false
-    changed_when: false
-    failed_when: false
-    register: post_install_diag
-
-  - ansible.builtin.debug:
-      var: post_install_diag.stdout_lines
-
   - name: Enable and start dnsmasq immediately
     ansible.builtin.systemd:
       name: dnsmasq
       state: started
       enabled: true
       daemon_reload: true
-
-
-  - name: Verify dnsmasq is active and bound to loopback only
-    ansible.builtin.shell: |
-     exec </dev/null
-      set +e
-      export SYSTEMD_PAGER= PAGER=cat
-      {
-        echo "[dnsmasq active]"; timeout -k 2s 5s systemctl is-active dnsmasq
-        echo "[listen :53]"; timeout -k 2s 5s ss -lntu 'sport = :53'
-        echo "[dnsmasq cmdline]"; tr '\0' ' ' < "/proc/$(pidof dnsmasq | awk '{print $1}')/cmdline" 2>/dev/null; echo
-      } 2>&1
-    args:
-      executable: /bin/bash
-    become: true
-    changed_when: false
-    failed_when: false
-    register: dnsmasq_verify
-
-  - ansible.builtin.debug:
-      var: dnsmasq_verify.stdout_lines
 
   - name: Reset any failed dnsmasq state
     ansible.builtin.command: systemctl reset-failed dnsmasq
@@ -326,30 +229,3 @@
       state: restarted
       daemon_reload: true
     become: true
-
-  - name: DIAG resolver latency (bounded, non-fatal)
-    ansible.builtin.shell: |
-      exec </dev/null
-      set +e
-      export SYSTEMD_PAGER= SYSTEMD_LESS=FRSXMK PAGER=cat
-      {
-        echo "=== DIAG_LATENCY $(date -Is) ==="
-        for i in 1 2 3; do timeout -k 2s 8s /usr/bin/time -f 'sudo=%E' sudo -n true; done
-        if command -v dig >/dev/null 2>&1; then
-          for ip in 127.0.0.1 127.0.1.1; do
-            timeout -k 2s 5s /usr/bin/time -f "ptr_$ip=%E" dig +tries=1 +time=2 -x "$ip" @127.0.0.1 +short
-          done
-        else
-          echo "dig_not_installed"
-        fi
-        timeout -k 2s 5s /usr/bin/time -f 'getent=%E' getent group consul
-      } 2>&1
-    args:
-      executable: /bin/bash
-    become: false
-    changed_when: false
-    failed_when: false
-    register: diag_latency
-
-  - ansible.builtin.debug:
-      var: diag_latency.stdout_lines

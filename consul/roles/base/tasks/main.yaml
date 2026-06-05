@@ -30,6 +30,15 @@
       state: present
     become: true
 
+  - name: Ensure GCP metadata short-name resolves via /etc/hosts (Vault gce auto-auth hardcodes http://metadata/ and bypasses dnsmasq)
+    ansible.builtin.lineinfile:
+      path: /etc/hosts
+      regexp: '^169\.254\.169\.254\s'
+      line: "169.254.169.254 metadata.google.internal metadata"
+      state: present
+    become: true
+
+
   - name: Distribution
     debug: msg="{{ ansible_distribution }}"
 

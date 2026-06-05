@@ -292,37 +292,38 @@
       - ansible.builtin.fail:
           msg: "dnsmasq failed to start:\n{{ _dnsmasq_log.stdout }}"
 
-
-  - name: Route .consul to local dnsmasq for current boot
-    ansible.builtin.command: "{{ item }}"
-    loop:
-      - resolvectl dns lo 127.0.0.1
-      - resolvectl domain lo ~consul
-    changed_when: false
+  - name: Ensure systemd-resolved drop-in directory exists
+    ansible.builtin.file:
+      path: /etc/systemd/resolved.conf.d
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
     become: true
 
-  - name: Persist .consul split-DNS routing across reboots
+  - name: Route .consul to local dnsmasq via systemd-resolved (persistent)
     ansible.builtin.copy:
-      dest: /etc/systemd/system/consul-dns-route.service
+      dest: /etc/systemd/resolved.conf.d/consul.conf
+      owner: root
+      group: root
       mode: '0644'
       content: |
-        [Unit]
-        Description=Route .consul DNS to local dnsmasq via systemd-resolved
-        After=systemd-resolved.service dnsmasq.service
-        Wants=systemd-resolved.service dnsmasq.service
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        ExecStart=/usr/bin/resolvectl dns lo 127.0.0.1
-        ExecStart=/usr/bin/resolvectl domain lo ~consul
-        [Install]
-        WantedBy=multi-user.target
+        # Split-DNS: send *.consul queries to the local dnsmasq on 127.0.0.1,
+        # which forwards them to the Consul agent (127.0.0.1#8600).
+        # "~consul" is a ROUTING-ONLY domain, so every other name keeps using
+        # the per-link upstream DNS (the interface's implicit "~." default route).
+        # This replaces the old "resolvectl ... lo" approach, which fails because
+        # systemd-resolved refuses to manage the loopback link.
+        [Resolve]
+        DNS=127.0.0.1
+        Domains=~consul
     become: true
 
-  - name: Enable consul DNS route unit on boot
+
+  - name: Apply .consul routing now (reload units + restart systemd-resolved)
     ansible.builtin.systemd:
-      name: consul-dns-route.service
-      enabled: true
+      name: systemd-resolved
+      state: restarted
       daemon_reload: true
     become: true
 

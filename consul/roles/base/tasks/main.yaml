@@ -134,19 +134,19 @@
           - "search domains: '{{ consul_base_search_domains | default('') }}'"
           - "upstream DNS:   {{ consul_base_upstream_dns | default([]) }}"
 
-  - name: PRE-DNSMASQ ground truth (resolver + sudo startup)
+  - name: PRE-DNSMASQ ground truth (resolver startup)
     ansible.builtin.shell: |
-      set -o pipefail
+      exec </dev/null
+      set +e
       {
         echo "=== PRE_DNSMASQ $(date -Is) ==="
-        echo "[hostname]"; hostname; hostname -f || true
-        echo "[resolv_link]"; readlink -f /etc/resolv.conf || true
-        echo "[/etc/resolv.conf]"; cat /etc/resolv.conf || true
-        echo "[/run/systemd/resolve/resolv.conf]"; cat /run/systemd/resolve/resolv.conf || true
-        echo "[nsswitch hosts]"; grep '^hosts:' /etc/nsswitch.conf || true
-        echo "[/etc/hosts]"; cat /etc/hosts || true
-        echo "[getent hostname]"; timeout 5s getent hosts "$(hostname)" || echo "getent_rc=$?"
-        echo "[sudo -n true timing]"; timeout 8s bash -lc 'time sudo -n true' || echo "sudo_rc=$?"
+        echo "[hostname]"; timeout -k 2s 5s hostname; timeout -k 2s 5s hostname -f
+        echo "[resolv_link]"; readlink -f /etc/resolv.conf
+        echo "[/etc/resolv.conf]"; cat /etc/resolv.conf
+        echo "[/run/systemd/resolve/resolv.conf]"; cat /run/systemd/resolve/resolv.conf
+        echo "[nsswitch hosts]"; grep '^hosts:' /etc/nsswitch.conf
+        echo "[/etc/hosts]"; cat /etc/hosts
+        echo "[getent hostname]"; timeout -k 2s 5s getent hosts "$(hostname)" || echo "getent_rc=$?"
       } 2>&1
     args:
       executable: /bin/bash
@@ -167,9 +167,15 @@
       mode: '0755'
     become: true
 
+  - name: Remove stale extensionless dnsmasq consul drop-in
+    ansible.builtin.file:
+      path: /etc/dnsmasq.d/10-consul
+      state: absent
+    become: true
+
   - name: Configure dnsmasq consul forwarding (no resolver takeover)
     ansible.builtin.copy:
-      dest: /etc/dnsmasq.d/10-consul
+      dest: /etc/dnsmasq.d/10-consul.conf
       owner: root
       group: root
       mode: '0644'
@@ -198,15 +204,17 @@
       state: present
       update_cache: false
   
-  - name: POST-INSTALL ground truth (did install auto-start break sudo/resolver?)
+  - name: POST-INSTALL ground truth (did install auto-start break resolver?)
     ansible.builtin.shell: |
+      exec </dev/null
+      set +e
+      export SYSTEMD_PAGER= SYSTEMD_LESS=FRSXMK PAGER=cat
       {
         echo "=== POST_INSTALL $(date -Is) ==="
-        echo "[sudo -n true timing]"; timeout 8s bash -lc 'time sudo -n true' || echo "sudo_rc=$?"
-        echo "[dnsmasq active]"; systemctl is-active dnsmasq || true
-        echo "[listen :53]"; ss -lntu 'sport = :53' || true
-        echo "[resolv_link]"; readlink -f /etc/resolv.conf || true
-        echo "[resolved active]"; systemctl is-active systemd-resolved || true
+        echo "[dnsmasq active]"; timeout -k 2s 5s systemctl is-active dnsmasq
+        echo "[listen :53]"; timeout -k 2s 5s ss -lntu 'sport = :53'
+        echo "[resolv_link]"; readlink -f /etc/resolv.conf
+        echo "[resolved active]"; timeout -k 2s 5s systemctl is-active systemd-resolved
       } 2>&1
     args:
       executable: /bin/bash
@@ -281,10 +289,29 @@
       daemon_reload: true
     become: true
 
-  - name: DIAG resolver latency
-    shell: |
-      for i in 1 2 3; do /usr/bin/time -f 'sudo=%E' sudo -n true; done
-      for ip in 127.0.0.1 127.0.1.1; do /usr/bin/time -f "ptr_$ip=%E" dig +tries=1 +time=2 -x $ip @127.0.0.1 +short; done
-      /usr/bin/time -f 'getent=%E' getent group consul
-    become: true
+  - name: DIAG resolver latency (bounded, non-fatal)
+    ansible.builtin.shell: |
+      exec </dev/null
+      set +e
+      export SYSTEMD_PAGER= SYSTEMD_LESS=FRSXMK PAGER=cat
+      {
+        echo "=== DIAG_LATENCY $(date -Is) ==="
+        for i in 1 2 3; do timeout -k 2s 8s /usr/bin/time -f 'sudo=%E' sudo -n true; done
+        if command -v dig >/dev/null 2>&1; then
+          for ip in 127.0.0.1 127.0.1.1; do
+            timeout -k 2s 5s /usr/bin/time -f "ptr_$ip=%E" dig +tries=1 +time=2 -x "$ip" @127.0.0.1 +short
+          done
+        else
+          echo "dig_not_installed"
+        fi
+        timeout -k 2s 5s /usr/bin/time -f 'getent=%E' getent group consul
+      } 2>&1
+    args:
+      executable: /bin/bash
+    become: false
     changed_when: false
+    failed_when: false
+    register: diag_latency
+
+  - ansible.builtin.debug:
+      var: diag_latency.stdout_lines

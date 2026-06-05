@@ -179,53 +179,27 @@
     failed_when: false
     become: true
 
-
-  - name: Verify dnsmasq actually started
-    ansible.builtin.command: systemctl is-active --quiet dnsmasq
-    register: _dnsmasq_active
-    changed_when: false
-    failed_when: false
-
-  - name: Dump dnsmasq diagnostics on failure
-    when: _dnsmasq_active.rc != 0
-    block:
-      - ansible.builtin.command: journalctl -u dnsmasq -n 100 --no-pager
-        register: _dnsmasq_log
-        changed_when: false
-      - ansible.builtin.fail:
-          msg: "dnsmasq failed to start:\n{{ _dnsmasq_log.stdout }}"
-
-  - name: Ensure systemd-resolved drop-in directory exists
-    ansible.builtin.file:
-      path: /etc/systemd/resolved.conf.d
-      state: directory
-      owner: root
-      group: root
-      mode: '0755'
+  - name: Check whether /etc/resolv.conf is the systemd-resolved symlink
+    ansible.builtin.stat:
+      path: /etc/resolv.conf
+    register: _resolv_conf
     become: true
 
-  - name: Route .consul to local dnsmasq via systemd-resolved (persistent)
+  - name: Drop the resolved symlink so resolv.conf can be managed statically
+    ansible.builtin.file:
+      path: /etc/resolv.conf
+      state: absent
+    become: true
+    when: _resolv_conf.stat.islnk | default(false)
+
+  - name: Point /etc/resolv.conf at local dnsmasq (front door)
     ansible.builtin.copy:
-      dest: /etc/systemd/resolved.conf.d/consul.conf
+      dest: /etc/resolv.conf
       owner: root
       group: root
       mode: '0644'
       content: |
-        # Split-DNS: send *.consul queries to the local dnsmasq on 127.0.0.1,
-        # which forwards them to the Consul agent (127.0.0.1#8600).
-        # "~consul" is a ROUTING-ONLY domain, so every other name keeps using
-        # the per-link upstream DNS (the interface's implicit "~." default route).
-        # This replaces the old "resolvectl ... lo" approach, which fails because
-        # systemd-resolved refuses to manage the loopback link.
-        [Resolve]
-        DNS=127.0.0.1
-        Domains=~consul
-    become: true
-
-
-  - name: Apply .consul routing now (reload units + restart systemd-resolved)
-    ansible.builtin.systemd:
-      name: systemd-resolved
-      state: restarted
-      daemon_reload: true
+        # Managed by Ansible (dco.consul.base) - dnsmasq is the first-hop resolver.
+        nameserver 127.0.0.1
+        options timeout:1 attempts:2
     become: true

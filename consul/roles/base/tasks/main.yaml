@@ -30,14 +30,6 @@
       state: present
     become: true
 
-  - name: Ensure GCP metadata short-name resolves via /etc/hosts (Vault gce auto-auth hardcodes http://metadata/ and bypasses dnsmasq)
-    ansible.builtin.lineinfile:
-      path: /etc/hosts
-      regexp: '^169\.254\.169\.254\s'
-      line: "169.254.169.254 metadata.google.internal metadata"
-      state: present
-    become: true
-
 
   - name: Distribution
     debug: msg="{{ ansible_distribution }}"
@@ -116,6 +108,19 @@
       content: |
         manage_etc_hosts: true
       mode: '0644'
+    become: true
+
+  - name: Ensure cloud-init's /etc/hosts template carries the GCP metadata short-name
+    # manage_etc_hosts:true makes cloud-init rewrite /etc/hosts from this template on
+    # EVERY boot, wiping anything written straight to /etc/hosts. Vault's gce auto-auth
+    # hardcodes http://metadata/ (bypasses dnsmasq), so the entry must live in the
+    # template to survive per-boot regeneration.
+    ansible.builtin.lineinfile:
+      path: /etc/cloud/templates/hosts.debian.tmpl
+      regexp: '^169\.254\.169\.254\s'
+      line: '169.254.169.254 metadata.google.internal metadata'
+      insertafter: '^127\.0\.0\.1 localhost'
+      state: present
     become: true
 
   - name: Ensure /etc/dnsmasq.d exists (package not yet installed)

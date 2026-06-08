@@ -1,5 +1,7 @@
 {% if packer_build == false %}
 retry_join = ["{{ query('inventory_hostnames', 'consul_server') | join('","')}}"]
+{% else %}
+retry_join = ["{{ consul_address }}"]
 {% endif %}
 
 addresses {

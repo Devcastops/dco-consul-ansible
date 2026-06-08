@@ -8,3 +8,5 @@ consul_dns_recursors: [ "1.1.1.1", "8.8.8.8" ]
 trigger_file_location: "{{ consul_config_dir }}/common-config.hcl"
 
 vault_colocated: false
+
+consul_address: "http://localhost:8500"

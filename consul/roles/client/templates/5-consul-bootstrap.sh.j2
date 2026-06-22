@@ -21,6 +21,8 @@ CONSUL_JWT=$(curl \
 
 echo $CONSUL_JWT > /etc/consul.d/token/jwt
 
+echo "bind_addr = $(hostname -I)" > /etc/consul.d/bind_address.hcl
+
 # start consul
 
 sudo systemctl start consul

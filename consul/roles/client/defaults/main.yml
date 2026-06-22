@@ -1,2 +1,4 @@
 ---
 # defaults file for consul_client
+
+packer_build: false

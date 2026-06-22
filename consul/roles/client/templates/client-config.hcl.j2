@@ -17,7 +17,9 @@ tls {
   }
 }
 
+{% if packer_build == false %}
 bind_addr = "{{ansible_default_ipv4.address}}"
+{% endif %}
 
 auto_encrypt {
   tls = true

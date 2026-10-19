@@ -146,7 +146,7 @@
       mode: '0644'
       content: |
         bind-interfaces
-        listen-address=127.0.0.1
+        listen-address=127.0.0.1,172.26.64.1
         no-resolv
         server=/consul/127.0.0.1#8600
         server=127.0.0.53
